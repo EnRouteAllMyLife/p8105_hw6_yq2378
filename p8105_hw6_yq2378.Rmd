@@ -99,10 +99,16 @@ weather =
 
 ```
 
-```{r beta prod}
+### $\log \left(\hat{\beta}_1 \times \hat{\beta}_2\right)$ Distribution
+
+This distribution has a heavy tail extending to low values and a bit of a “shoulder”. The density plog of $\log \left(\hat{\beta}_1 \times \hat{\beta}_2\right)$ values represents the variability in the logarithmic product of the estimated coefficients for `tmin` and `prxp` in the linear regression model. The value centers around -6.  This quantity captures the joint effect of the predictors on `tmax`. The spread provides insights into the uncertainty associated with this combined predictor influence.
+
+
+```{r beta prod,fig.align = 'center'}
 # prepocessing? 
 
-weather |> 
+beta = 
+  weather |> 
   modelr::bootstrap(n = 5000) |> 
   mutate(
     models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
@@ -111,23 +117,34 @@ weather |>
   unnest(results) |> 
   filter(term %in% c('tmin', 'prcp')) |>
   group_by(.id) |>
-  summarise(estimate = log(prod(estimate))) |>
-  ggplot(aes(x = estimate)) + geom_density() + theme_pubclean()
+  summarise(estimate = log(prod(estimate))) 
 
+
+
+CI_beta_squared = quantile(beta$estimate, c(0.025, 0.975),na.rm = TRUE)
+ggplot(beta,aes(x = estimate)) + geom_density() + theme_pubclean() + 
+  labs(title = "Distribution of log(beta1 * beta2)", x = "log(beta1 * beta2)",
+       subtitle = paste("95% CI for R-squared: ","(", round(CI_beta_squared[1],2),", ", round(CI_beta_squared[2],2),")", sep ="")) 
 ```
 
+### \(R^2\) Distribution
 
+The distribution of $R^2$ values reflects the variability in how well the linear regression model explains the variance in the maximum temperature. The density plot shows a range of $R^2$ values obtained from 5000 bootstrap samples. It is roughly bell shape. Higher $R^2$ values indicate a better fit of the model, while lower values suggest less explanatory power. The distribution helps us understand the uncertainty in estimating the goodness-of-fit for the given predictors (`tmin` and `prcp`). The most frequent values range from 0.91 to 0.93, which is a pretty good fit.
 
-```{r R2 prod}
+```{r R2 prod,fig.align = 'center' }
 # prepocessing? 
-weather |> 
+R2 = 
+  weather |> 
   modelr::bootstrap(n = 5000) |> 
   mutate(
     models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
     results = map(models, broom::glance)) |> 
   select(results) |> 
   unnest(results) |>
-  select(r.squared) |>
-  ggplot(aes(x = r.squared)) + geom_density() + theme_pubclean()
+  select(r.squared) 
 
+CI_r_squared = quantile(R2$r.squared, c(0.025, 0.975))
+ggplot(R2,aes(x = r.squared)) + geom_density() + theme_pubclean() + 
+  labs(title = "Distribution of R-squared", x = "R-squared",
+       subtitle = paste("95% CI for R-squared: ","(", round(CI_r_squared[1],2),", ", round(CI_r_squared[2],2),")", sep ="")) 
 ```
