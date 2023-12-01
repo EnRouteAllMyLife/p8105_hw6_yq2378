@@ -17,7 +17,7 @@ set.seed(1)
 ```
 # Problem 1
 
-```{r load data}
+```{r load homicide data}
 homicide = read.csv("https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv")
 
 homicide = homicide |>
@@ -62,7 +62,7 @@ city_results = homicide |>
   arrange(desc(OR))
 ```
 
-```{r plot for ORs and CIs}
+```{r plot for ORs and CIs, fig.width = 15, fig.align = 'center'}
 ggplot(city_results, aes(x = reorder(city_state, OR),
                          y = OR, ymin = CI_low, ymax = CI_high)) +
   geom_point(position = position_dodge(width = 0.5), size = 1, color = "red") +
@@ -81,3 +81,53 @@ Beginning with Atlanta, GA, a distinct trend emerges: the subsequent six cities 
 
 Regarding the error bars in the plot, it's notable that the cities positioned towards the right side generally exhibit wider error bars. This observation suggests a potential issue related to sample size in these cities. Wider error bars typically indicate increased uncertainty in the estimated odds ratios, and this could be attributed to smaller sample sizes for certain cities.
 
+# Problem 2
+
+
+```{r load weather data}
+weather = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2022-01-01",
+    date_max = "2022-12-31") |>
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) |>
+  select(name, id, everything())
+
+```
+
+```{r beta prod}
+# prepocessing? 
+
+weather |> 
+  modelr::bootstrap(n = 5000) |> 
+  mutate(
+    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    results = map(models, broom::tidy)) |> 
+  select(.id,results) |> 
+  unnest(results) |> 
+  filter(term %in% c('tmin', 'prcp')) |>
+  group_by(.id) |>
+  summarise(estimate = log(prod(estimate))) |>
+  ggplot(aes(x = estimate)) + geom_density() + theme_pubclean()
+
+```
+
+
+
+```{r R2 prod}
+# prepocessing? 
+weather |> 
+  modelr::bootstrap(n = 5000) |> 
+  mutate(
+    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    results = map(models, broom::glance)) |> 
+  select(results) |> 
+  unnest(results) |>
+  select(r.squared) |>
+  ggplot(aes(x = r.squared)) + geom_density() + theme_pubclean()
+
+```
