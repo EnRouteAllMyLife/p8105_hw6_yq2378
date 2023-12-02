@@ -10,10 +10,9 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r library and seed, warning = FALSE}
-library(tidyverse)
-library(plotly)
-library(ggpubr)
 set.seed(1)
+x = c("tidyverse","ggpubr","modelr","dplyr","MASS","corrplot","mgcv")
+lapply(x, require, character.only = TRUE)
 ```
 # Problem 1
 
@@ -37,7 +36,7 @@ fit_logistic = function(data) {
   tidy_res = broom::tidy(glm_res, exponentiate = TRUE, conf.int = TRUE)
   or_ci = tidy_res |>
     filter(term == "victim_sexMale") |>
-    select(estimate, conf.low, conf.high)
+    dplyr::select(estimate, conf.low, conf.high)
   return(or_ci)
 }
 ```
@@ -57,7 +56,7 @@ city_results = homicide |>
   nest() |>
   mutate(or_ci = map(data, fit_logistic)) |>
   unnest(or_ci) |>
-  select(-data) |>
+  dplyr:: select(-data) |>
   rename(OR = estimate, CI_low = conf.low, CI_high = conf.high) |>
   arrange(desc(OR))
 ```
@@ -95,7 +94,7 @@ weather =
     name = recode(id, USW00094728 = "CentralPark_NY"),
     tmin = tmin / 10,
     tmax = tmax / 10) |>
-  select(name, id, everything())
+  dplyr::select(name, id, everything())
 
 ```
 
@@ -113,7 +112,7 @@ beta =
   mutate(
     models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
     results = map(models, broom::tidy)) |> 
-  select(.id,results) |> 
+  dplyr::select(.id,results) |> 
   unnest(results) |> 
   filter(term %in% c('tmin', 'prcp')) |>
   group_by(.id) |>
@@ -127,7 +126,7 @@ ggplot(beta,aes(x = estimate)) + geom_density() + theme_pubclean() +
        subtitle = paste("95% CI for R-squared: ","(", round(CI_beta_squared[1],2),", ", round(CI_beta_squared[2],2),")", sep ="")) 
 ```
 
-### \(R^2\) Distribution
+### $R^2$ Distribution
 
 The distribution of $R^2$ values reflects the variability in how well the linear regression model explains the variance in the maximum temperature. The density plot shows a range of $R^2$ values obtained from 5000 bootstrap samples. It is roughly bell shape. Higher $R^2$ values indicate a better fit of the model, while lower values suggest less explanatory power. The distribution helps us understand the uncertainty in estimating the goodness-of-fit for the given predictors (`tmin` and `prcp`). The most frequent values range from 0.91 to 0.93, which is a pretty good fit.
 
@@ -139,12 +138,102 @@ R2 =
   mutate(
     models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
     results = map(models, broom::glance)) |> 
-  select(results) |> 
+  dplyr::select(results) |> 
   unnest(results) |>
-  select(r.squared) 
+  dplyr::select(r.squared) 
 
 CI_r_squared = quantile(R2$r.squared, c(0.025, 0.975))
 ggplot(R2,aes(x = r.squared)) + geom_density() + theme_pubclean() + 
   labs(title = "Distribution of R-squared", x = "R-squared",
        subtitle = paste("95% CI for R-squared: ","(", round(CI_r_squared[1],2),", ", round(CI_r_squared[2],2),")", sep ="")) 
 ```
+
+
+# Problem 3
+
+```{r load birthweight data}
+
+variable_factor = c(
+  babysex = "factor", 
+  frace = "factor",         
+  malform = "factor",
+  mrace = "factor")
+
+birthweight = read.csv("https://p8105.com/data/birthweight.csv"
+                       ,colClasses = variable_factor)
+birthweight = birthweight  |> janitor::clean_names()
+skimr::skim(birthweight)
+# delet pnumlbw and pnumsga
+```
+
+There are 4342 observation of 20 variables with no missing value. 4 factors and 16 continuous variables. We delete `pnumlbw` and `pnumsga` for they are all zeros. Next, we standardizaed all the continuous variables. Standardization involves subtracting the mean and dividing by the standard deviation, ensuring that all variables are on a comparable scale. From the correlation plot, we found that some pairs have a correlation higher than 0.8 which may lead to multicollinearity. To avoid this, we remove `ppbmi` and `delwt` leaving only `ppwt`.
+
+```{r scale and correlation,fig.align = 'center'}
+# Center non-factor variables
+birthweight_scale = birthweight |>
+  dplyr::select(-pnumlbw, -pnumsga) |>
+  mutate_if(is.numeric, scale)
+corrplot(cor(birthweight_scale |> select_if(is.numeric)),  method = "number")
+# ppbmi & ppwt 0.85
+# ppwt & delwt 0.87
+
+birthweight_scale = birthweight_scale |>
+  dplyr::select(-ppbmi, -delwt) 
+
+```
+
+
+```{r AIC }
+fit = lm(bwt~., data = birthweight_scale)
+stepAIC(fit, direction="both")
+fit_AIC = lm(bwt~babysex + bhead + blength + fincome + gaweeks + mheight + 
+    mrace + parity + ppwt + smoken + wtgain, data = birthweight_scale)
+summary(fit_AIC)
+plot(fit_AIC)
+# Plot of model residuals against fitted values
+fit_AIC_residuals =  broom::augment(fit_AIC)|>
+  add_predictions(fit_AIC) |>
+  add_residuals(fit_AIC)
+
+ggplot(fit_AIC_residuals, aes(.fitted, .resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Residuals vs Fitted Values",
+       x = "Fitted Values",
+       y = "Residuals") +
+  theme_minimal()
+```
+
+```{r model select}
+
+cv_df =
+  crossv_mc(birthweight_scale, 100) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+cv_df = 
+  cv_df |> 
+  mutate(
+    linear_mod  = map(train, \(df) lm(bwt ~ babysex + bhead + blength + fincome + 
+                                        gaweeks + mheight + mrace + parity + 
+                                        ppwt + smoken + wtgain, data = df)),
+    
+    alter1_mod = map(train, \(df) lm(bwt ~ blength + gaweeks, data = df)),
+    alter2_mod  = map(train, \(df) lm(bwt ~ bhead * gaweeks * babysex,  data = df))) |> 
+  mutate(
+    rmse_linear = map2(linear_mod, test, \(mod, df) modelr::rmse(model = mod, data = df)),
+    rmse_alter1    = map2(alter1_mod, test, \(mod, df) modelr::rmse(model = mod, data = df)),
+    rmse_alter2 = map2(alter2_mod, test, \(mod, df) modelr::rmse(model = mod, data = df)))
+cv_df |> 
+  dplyr::select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") |>
+  mutate(model = factor(model),
+         rmse = as.numeric(rmse)) |> 
+  ggplot(aes(x = model, y = rmse)) + geom_violin() + theme_pubclean()
+
+```
+
