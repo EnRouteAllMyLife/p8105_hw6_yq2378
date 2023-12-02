@@ -201,6 +201,10 @@ summary(fit_AIC)
 #plot(fit_AIC)
 ```
 
+
+We conducted a comprehensive series of model diagnostics, including examinations of fitted values versus residuals, quantile-quantile (QQ) plots, and Variance Inflation Factors (VIF). During this process, we identified three conspicuous residuals. Subsequently, after excluding these three points and reconstructing the model using the same procedures, we arrived at a model that closely resembles the initial one, accompanied by a slight enhancement in the $R^2$ value. It is noteworthy that, in this iteration, the variable `fincome` attains statistical significance, marking a notable change in its impact on the model.
+
+
 ```{r, model diagnose}
 # Plot of model residuals against fitted values
 fit_AIC_residuals =  broom::augment(fit_AIC)|>
@@ -231,6 +235,7 @@ fit_AIC = lm(bwt ~ babysex + bhead + blength + fincome + gaweeks +
 summary(fit_AIC)
 #plot(fit_AIC)
 ```
+We compared three models based on their cross-validated prediction errors. The results, depicted in a violin plot, clearly demonstrate that our model outperforms the others in terms of root mean square error (RMSE).
 
 ```{r model select}
 
