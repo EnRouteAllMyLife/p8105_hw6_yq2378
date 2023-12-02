@@ -11,14 +11,15 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r library and seed, warning = FALSE}
 set.seed(1)
-x = c("tidyverse","ggpubr","modelr","dplyr","MASS","corrplot","mgcv")
+x = c("tidyverse","ggpubr","modelr","dplyr","MASS","corrplot","mgcv","car")
 lapply(x, require, character.only = TRUE)
 ```
 # Problem 1
 
 ```{r load homicide data}
-homicide = read.csv("https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv")
-
+#homicide = read.csv("https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv")
+#write.csv(homicide,"./data/homicide_data.csv")
+homicide = read.csv("./data/homicide_data.csv")
 homicide = homicide |>
   mutate(city_state = str_c(city, state, sep=", "),
          if_solved = if_else(disposition == "Closed by arrest",1,0 ),
@@ -51,7 +52,7 @@ homicide |>
 
 ```{r loop the city}
 # Fit logistic regression for each city and extract OR and CI
-city_results = homicide |>
+city_results = homicide |> 
   group_by(city_state) |>
   nest() |>
   mutate(or_ci = map(data, fit_logistic)) |>
@@ -84,18 +85,19 @@ Regarding the error bars in the plot, it's notable that the cities positioned to
 
 
 ```{r load weather data}
-weather = 
-  rnoaa::meteo_pull_monitors(
-    c("USW00094728"),
-    var = c("PRCP", "TMIN", "TMAX"), 
-    date_min = "2022-01-01",
-    date_max = "2022-12-31") |>
-  mutate(
-    name = recode(id, USW00094728 = "CentralPark_NY"),
-    tmin = tmin / 10,
-    tmax = tmax / 10) |>
-  dplyr::select(name, id, everything())
-
+#weather = 
+#  rnoaa::meteo_pull_monitors(
+#    c("USW00094728"),
+#    var = c("PRCP", "TMIN", "TMAX"), 
+#    date_min = "2022-01-01",
+#    date_max = "2022-12-31") |>
+#  mutate(
+#    name = recode(id, USW00094728 = "CentralPark_NY"),
+#    tmin = tmin / 10,
+#    tmax = tmax / 10) |>
+#  dplyr::select(name, id, everything())
+#write.csv(weather,"./data/weather_data.csv")
+weather = read.csv("./data/weather_data.csv")
 ```
 
 ### $\log \left(\hat{\beta}_1 \times \hat{\beta}_2\right)$ Distribution
@@ -105,7 +107,6 @@ This distribution has a heavy tail extending to low values and a bit of a “sho
 
 ```{r beta prod,fig.align = 'center'}
 # prepocessing? 
-
 beta = 
   weather |> 
   modelr::bootstrap(n = 5000) |> 
@@ -117,8 +118,6 @@ beta =
   filter(term %in% c('tmin', 'prcp')) |>
   group_by(.id) |>
   summarise(estimate = log(prod(estimate))) 
-
-
 
 CI_beta_squared = quantile(beta$estimate, c(0.025, 0.975),na.rm = TRUE)
 ggplot(beta,aes(x = estimate)) + geom_density() + theme_pubclean() + 
@@ -151,6 +150,13 @@ ggplot(R2,aes(x = r.squared)) + geom_density() + theme_pubclean() +
 
 # Problem 3
 
+
+There are a total of 4342 observations across 20 variables, and the dataset exhibits no missing values. The dataset comprises 4 factor variables and 16 continuous variables. Two variables, namely `pnumlbw` and `pnumsga`, were excluded from further analysis as they contain only zeros.
+
+To enhance comparability, all continuous variables were standardized. This involved subtracting the mean and dividing by the standard deviation. This standardization ensures that all variables are represented on a consistent scale.
+
+Upon reviewing the correlation plot, it was observed that certain variable pairs exhibited a correlation exceeding 0.8. High correlations between variables may result in multicollinearity issues. In response, the variables `ppbmi` and `delwt` were removed, retaining only `ppwt` in the dataset. This step was taken to mitigate potential multicollinearity concerns.
+
 ```{r load birthweight data}
 
 variable_factor = c(
@@ -159,14 +165,15 @@ variable_factor = c(
   malform = "factor",
   mrace = "factor")
 
-birthweight = read.csv("https://p8105.com/data/birthweight.csv"
-                       ,colClasses = variable_factor)
+#birthweight = read.csv("https://p8105.com/data/birthweight.csv"
+#                       ,colClasses = variable_factor)
+#write.csv(birthweight, "./data/birthweight_data.csv")
+birthweight = read.csv("./data/birthweight_data.csv",colClasses = variable_factor)
 birthweight = birthweight  |> janitor::clean_names()
 skimr::skim(birthweight)
 # delet pnumlbw and pnumsga
 ```
 
-There are 4342 observation of 20 variables with no missing value. 4 factors and 16 continuous variables. We delete `pnumlbw` and `pnumsga` for they are all zeros. Next, we standardizaed all the continuous variables. Standardization involves subtracting the mean and dividing by the standard deviation, ensuring that all variables are on a comparable scale. From the correlation plot, we found that some pairs have a correlation higher than 0.8 which may lead to multicollinearity. To avoid this, we remove `ppbmi` and `delwt` leaving only `ppwt`.
 
 ```{r scale and correlation,fig.align = 'center'}
 # Center non-factor variables
@@ -182,6 +189,8 @@ birthweight_scale = birthweight_scale |>
 
 ```
 
+The model construction employed a stepwise regression approach, aiming to minimize the Akaike Information Criterion (AIC). In the summary results, it's discerned that only the variables `fincome` and `mrace3` lack statistical significance. The optimal model achieved an AIC of -5503.64, indicative of its superior fit. Additionally, the adjusted $R^2$ for this model stands at approximately 0.72, suggesting a robust explanation of the response variable's variability while considering model complexity.
+
 
 ```{r AIC }
 fit = lm(bwt~., data = birthweight_scale)
@@ -189,7 +198,10 @@ stepAIC(fit, direction="both")
 fit_AIC = lm(bwt~babysex + bhead + blength + fincome + gaweeks + mheight + 
     mrace + parity + ppwt + smoken + wtgain, data = birthweight_scale)
 summary(fit_AIC)
-plot(fit_AIC)
+#plot(fit_AIC)
+```
+
+```{r, model diagnose}
 # Plot of model residuals against fitted values
 fit_AIC_residuals =  broom::augment(fit_AIC)|>
   add_predictions(fit_AIC) |>
@@ -202,6 +214,22 @@ ggplot(fit_AIC_residuals, aes(.fitted, .resid)) +
        x = "Fitted Values",
        y = "Residuals") +
   theme_minimal()
+
+plot(fit_AIC)
+id_list = c(498, 1477, 1505)
+## CIF for multicolinearity
+vif(fit_AIC)
+
+```
+
+```{r AIC2 }
+fit = lm(bwt~., data = birthweight_scale |>  filter(!(row_number() %in% id_list)))
+stepAIC(fit, direction="both")
+fit_AIC = lm(bwt ~ babysex + bhead + blength + fincome + gaweeks + 
+    mheight + mrace + parity + ppwt + smoken + wtgain, data = filter(birthweight_scale, 
+    !(row_number() %in% id_list)))
+summary(fit_AIC)
+#plot(fit_AIC)
 ```
 
 ```{r model select}
